@@ -223,7 +223,7 @@ def main():
                 stream.write(f"tag={tag}\n")
     else:
         if os.environ.get("GITHUB_ACTIONS") and not os.environ.get("GH_TOKEN"):
-            raise ValueError("Add STORE_PUBLISH_TOKEN with Contents-write access to amogh-store to the private app repository's Actions secrets.")
+            raise ValueError("Add STORE_PUBLISH_TOKEN with Contents-write access to store to the private app repository's Actions secrets.")
         publish(config, app, args.assets)
 
 

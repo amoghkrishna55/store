@@ -35,7 +35,7 @@ class StoreTests(unittest.TestCase):
         numeric = marketing.split("-", 1)[0]
         return {"version": numeric, "marketingVersion": marketing, "buildVersion": build,
                 "date": "2026-11-13T20:51:06Z", "minOSVersion": "18.0",
-                "downloadURL": f"https://github.com/amoghkrishna55/amogh-store/releases/download/drunkprime-v{marketing}/DrunkPrime-{marketing}.ipa",
+                "downloadURL": f"https://github.com/amoghkrishna55/store/releases/download/drunkprime-v{marketing}/DrunkPrime-{marketing}.ipa",
                 "size": 1234, "sha256": "a" * 64, "prerelease": "-" in marketing,
                 "appPermissions": {"entitlements": [], "privacy": {"NSCameraUsageDescription": "Scan purifier labels."}}}
 
@@ -165,7 +165,7 @@ class StoreTests(unittest.TestCase):
         current["versions"] = [self.version("1.3.0")]
         writes = []
         def api(method, path, payload=None):
-            self.assertTrue(path.startswith("repos/amoghkrishna55/amogh-store/contents/apps/"))
+            self.assertTrue(path.startswith("repos/amoghkrishna55/store/contents/apps/"))
             if method == "GET":
                 return {"sha": str(len(writes)), "content": base64.b64encode(json.dumps(current).encode()).decode()}
             writes.append(payload)
