@@ -1,0 +1,11 @@
+{
+  "id": "drunkprime",
+  "name": "DrunkPrime",
+  "bundleIdentifier": "dev.amogh.DrunkPrime",
+  "developerName": "Amogh Krishna",
+  "subtitle": "Your purifier, on your local Wi-Fi.",
+  "localizedDescription": "View and manage compatible DrinkPrime water purifiers over a local Wi-Fi connection. Check water usage, remaining allowance, expiry and device readings. Save purifier profiles, scan QR codes, configure Wi-Fi and review parameter changes. Profiles and request history stay on your device.",
+  "iconURL": "assets/drunkprime.png",
+  "category": "utilities",
+  "versions": []
+}

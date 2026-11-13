@@ -1,0 +1,6 @@
+.DS_Store
+.verification/
+site/
+__pycache__/
+*.pyc
+*.ipa
