@@ -7,5 +7,25 @@
   "localizedDescription": "View and manage compatible DrinkPrime water purifiers over a local Wi-Fi connection. Check water usage, remaining allowance, expiry and device readings. Save purifier profiles, scan QR codes, configure Wi-Fi and review parameter changes. Profiles and request history stay on your device.",
   "iconURL": "assets/drunkprime.png",
   "category": "utilities",
-  "versions": []
+  "versions": [
+    {
+      "bundleIdentifier": "dev.amogh.DrunkPrime",
+      "version": "1.4.0",
+      "buildVersion": "1",
+      "marketingVersion": "1.4.0",
+      "date": "2026-11-13T20:51:06Z",
+      "minOSVersion": "18.0",
+      "downloadURL": "https://github.com/amoghkrishna55/store/releases/download/drunkprime-v1.4.0/DrunkPrime-1.4.0.ipa",
+      "size": 4197211,
+      "sha256": "fb09f0f5d322fd11b6e4589d6d5196a84a1a397d858c6f6d155718a628a039d4",
+      "prerelease": false,
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "Scan the QR label on your purifier to save its identifier.",
+          "NSLocalNetworkUsageDescription": "Connect directly to your purifier to read its status and send the changes you select."
+        }
+      }
+    }
+  ]
 }
