@@ -9,6 +9,8 @@ import unittest
 import zipfile
 import sys
 import base64
+from unittest import mock
+import os
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -212,3 +214,36 @@ class StoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publisher.publish(self.config, self.app, assets)
         self.assertEqual(writes, [])
+
+    def test_a_draft_that_becomes_published_is_not_clobbered(self):
+        publisher = self.module("publish")
+        calls = []
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = Path(temporary)
+            ipa = self.fixture_assets(assets)
+            public = publisher.prepare(self.config, self.app, assets)
+            digests = {ipa.name: hashlib.sha256(ipa.read_bytes()).hexdigest(),
+                       ipa.name + ".sha256": hashlib.sha256(ipa.with_suffix(".ipa.sha256").read_bytes()).hexdigest(),
+                       "app.json": hashlib.sha256((json.dumps(public, indent=2) + "\n").encode()).hexdigest()}
+            release = {"draft": True, "assets": [{"name": name, "digest": "sha256:" + digest} for name, digest in digests.items()]}
+            publisher.api = lambda *args: copy.deepcopy(release)
+            def gh(*args):
+                release["draft"] = False
+                calls.append(args)
+            publisher.gh = gh
+            publisher.update_entry = lambda *args: None
+            publisher.publish(self.config, self.app, assets)
+        self.assertFalse(any(args[:2] == ("release", "upload") for args in calls))
+        self.assertFalse(any("--clobber" in args for args in calls))
+
+    def test_fetch_exports_the_validated_tag_for_publication_locking(self):
+        publisher = self.module("publish")
+        with tempfile.TemporaryDirectory() as temporary:
+            assets = Path(temporary)
+            self.fixture_assets(assets)
+            output = assets / "outputs"
+            publisher.fetch = lambda *args: "v1.4.0"
+            with mock.patch.object(sys, "argv", ["publish.py", "fetch", "--app", "drunkprime", "--tag", "v1.4.0", "--source-repo", "amoghkrishna55/DrunkPrime", "--assets", str(assets)]), mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
+                publisher.main()
+            self.assertTrue(output.is_file())
+            self.assertEqual(dict(line.split("=", 1) for line in output.read_text().splitlines())["tag"], "v1.4.0")

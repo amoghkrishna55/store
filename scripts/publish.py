@@ -146,11 +146,21 @@ def publish(config, app, assets):
             gh("release", "create", tag, *map(str, files), "--repo", repo, "--latest=false",
                "--title", f"{app['name']} {public['marketingVersion']}", "--notes", f"{app['name']} {public['marketingVersion']}.", *flags)
         elif release["draft"]:
-            if any(asset["name"] not in expected for asset in release["assets"]):
+            existing = {asset["name"]: asset.get("digest") for asset in release["assets"]}
+            if any(name not in expected for name in existing):
                 raise ValueError("The draft contains unexpected assets; publication stopped.")
-            gh("release", "upload", tag, *map(str, files), "--repo", repo, "--clobber")
-            gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest=false",
-               "--prerelease=" + str(public["prerelease"]).lower())
+            if any(digest != expected[name] for name, digest in existing.items()):
+                raise ValueError("The draft contains different bytes; publication stopped.")
+            missing = [file for file in files if file.name not in existing]
+            if missing:
+                gh("release", "upload", tag, *map(str, missing), "--repo", repo)
+            release = api("GET", f"repos/{repo}/releases/tags/{tag}")
+            actual = {asset["name"]: asset.get("digest") for asset in release["assets"]}
+            if actual != expected:
+                raise ValueError("Public draft assets differ from the verified files. Catalog unchanged.")
+            if release["draft"]:
+                gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest=false",
+                   "--prerelease=" + str(public["prerelease"]).lower())
         release = api("GET", f"repos/{repo}/releases/tags/{tag}")
         actual = {asset["name"]: asset.get("digest") for asset in release["assets"]}
         if release["draft"] or actual != expected:
@@ -184,6 +194,7 @@ def fetch(app, source, tag, run_id, output):
     output.mkdir(parents=True, exist_ok=True)
     gh("release", "download", tag, "--repo", source, "--dir", str(output), "--clobber",
        "--pattern", filename, "--pattern", filename + ".sha256", "--pattern", "app.json")
+    return tag
 
 
 def main():
@@ -202,7 +213,14 @@ def main():
     if app["id"] != args.app:
         raise ValueError("App identifier does not match its registration.")
     if args.command == "fetch":
-        fetch(app, args.source_repo or "", args.tag, args.run_id, args.assets)
+        tag = fetch(app, args.source_repo or "", args.tag, args.run_id, args.assets)
+        public = prepare(config, app, args.assets)
+        if public["marketingVersion"] != tag[1:]:
+            raise ValueError("Fetched release metadata version does not match the validated tag.")
+        output = os.environ.get("GITHUB_OUTPUT")
+        if output:
+            with open(output, "a") as stream:
+                stream.write(f"tag={tag}\n")
     else:
         if os.environ.get("GITHUB_ACTIONS") and not os.environ.get("GH_TOKEN"):
             raise ValueError("Add STORE_PUBLISH_TOKEN with Contents-write access to amogh-store to the private app repository's Actions secrets.")
