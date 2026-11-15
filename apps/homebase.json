@@ -7,5 +7,24 @@
   "localizedDescription": "A single app for a self-hosted home setup. Watch a live camera, take snapshots and recordings, search and tail logs from VictoriaLogs, and see at a glance which servers are reporting. You point it at your own servers in Settings; nothing is preconfigured.",
   "iconURL": "assets/homebase.png",
   "category": "utilities",
-  "versions": []
+  "versions": [
+    {
+      "bundleIdentifier": "dev.amogh.Homebase",
+      "version": "1.0.0",
+      "buildVersion": "1",
+      "marketingVersion": "1.0.0",
+      "date": "2026-11-15T06:04:06Z",
+      "minOSVersion": "17.0",
+      "downloadURL": "https://github.com/amoghkrishna55/store/releases/download/homebase-v1.0.0/Homebase-1.0.0.ipa",
+      "size": 1462741,
+      "sha256": "ee9c6e8b9a1ba8805fa3bf9da5ad912e62c17466d473b0a35cb8695f8a82e760",
+      "prerelease": false,
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "Homebase connects to services on your home network."
+        }
+      }
+    }
+  ]
 }
