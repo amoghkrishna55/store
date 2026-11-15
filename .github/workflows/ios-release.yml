@@ -1,0 +1,171 @@
+name: iOS release
+
+# Shared by every app repository: builds the unsigned IPA from a version tag and
+# publishes it to this store. An app repository calls it from a short workflow
+# of its own; see the README.
+
+"on":
+  workflow_call:
+    inputs:
+      app:
+        description: "Store identifier, matching apps/<app>.json in this repository"
+        required: true
+        type: string
+      scheme:
+        description: "Xcode scheme to archive"
+        required: true
+        type: string
+      tag:
+        description: "Version tag to build, for example v1.2.0 or v1.3.0-beta.1"
+        required: true
+        type: string
+      publish:
+        description: "Publish to the store; turn off to only build and check the IPA"
+        type: boolean
+        default: true
+      project:
+        description: "Path to the .xcodeproj, when Xcode cannot find it by itself"
+        type: string
+        default: ""
+      xcodegen:
+        description: "Generate the Xcode project from project.yml first"
+        type: boolean
+        default: false
+      xcode:
+        description: "Xcode version on the runner, for example 26.6; empty uses the runner default"
+        type: string
+        default: ""
+      runner:
+        description: "macOS runner image"
+        type: string
+        default: macos-26
+      test-command:
+        description: "Command that must pass before the app is built, for example swift test"
+        type: string
+        default: ""
+    secrets:
+      STORE_PUBLISH_TOKEN:
+        description: "Token with Contents read and write access to this store repository"
+        required: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    env:
+      APP_ID: ${{ inputs.app }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check the version tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$ ]]; then
+            echo "::error::Use vMAJOR.MINOR.PATCH, optionally followed by -alpha.N, -beta.N or -rc.N."
+            exit 1
+          fi
+
+      - name: Check out the app at the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          path: app
+          persist-credentials: false
+
+      - name: Check out the store tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: amoghkrishna55/store
+          path: store
+          persist-credentials: false
+
+      - name: Select Xcode
+        env:
+          XCODE_VERSION: ${{ inputs.xcode }}
+        run: |
+          if [[ -n "$XCODE_VERSION" ]]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - name: Generate the Xcode project
+        if: inputs.xcodegen
+        working-directory: app
+        run: |
+          command -v xcodegen >/dev/null || brew install --quiet xcodegen
+          xcodegen generate --quiet
+
+      - name: Run tests
+        if: inputs.test-command != ''
+        working-directory: app
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+        run: bash -euo pipefail -c "$TEST_COMMAND"
+
+      - name: Archive the unsigned app
+        working-directory: app
+        env:
+          SCHEME: ${{ inputs.scheme }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          args=(-scheme "$SCHEME" -configuration Release -destination 'generic/platform=iOS'
+                -archivePath "$RUNNER_TEMP/app.xcarchive" -derivedDataPath "$RUNNER_TEMP/derived"
+                CODE_SIGNING_ALLOWED=NO)
+          if [[ -n "$PROJECT" ]]; then
+            args=(-project "$PROJECT" "${args[@]}")
+          fi
+          xcodebuild "${args[@]}" archive -quiet
+
+      - name: Package and check the IPA
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 store/scripts/package.py "$RUNNER_TEMP/app.xcarchive" --app "$APP_ID" --tag "$RELEASE_TAG" \
+            --build "$BUILD_NUMBER" --commit "$(git -C app rev-parse HEAD)" --output dist
+
+      - name: Keep the release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ inputs.app }}-${{ inputs.tag }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true
+
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: store-${{ inputs.app }}-${{ inputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out the store tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: amoghkrishna55/store
+          path: store
+          persist-credentials: false
+
+      - name: Retrieve the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ inputs.app }}-${{ inputs.tag }}
+          path: release
+
+      - name: Publish the IPA and catalog entry
+        env:
+          GH_TOKEN: ${{ secrets.STORE_PUBLISH_TOKEN }}
+          APP_ID: ${{ inputs.app }}
+        run: python3 store/scripts/publish.py publish --app "$APP_ID" --assets release

@@ -51,6 +51,8 @@ def validate_version(config, app, value):
 def generate(config, apps):
     if not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", config["repository"]):
         raise ValueError("Invalid store repository.")
+    if not config["icon"].startswith("assets/") or ".." in PurePosixPath(config["icon"]).parts:
+        raise ValueError("The store icon must be a public store asset.")
     identifiers, bundles = set(), set()
     for app in apps:
         if not re.fullmatch(r"[a-z][a-z0-9-]*", app["id"]) or app["id"] in identifiers or app["bundleIdentifier"] in bundles:
@@ -72,7 +74,7 @@ def generate(config, apps):
         source = {"name": config["name"] + (" Beta" if include_beta else ""),
                   "subtitle": "Apps by Amogh Krishna",
                   "description": "Personal iOS apps by Amogh Krishna.",
-                  "iconURL": config["url"] + "/assets/drunkprime.png",
+                  "iconURL": config["url"] + "/" + config["icon"],
                   "website": "https://github.com/" + config["repository"], "apps": [], "news": []}
         for app in apps:
             versions = sorted((v for v in app["versions"] if include_beta or not v["prerelease"]),

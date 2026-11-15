@@ -9,8 +9,6 @@ import unittest
 import zipfile
 import sys
 import base64
-from unittest import mock
-import os
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,14 +234,58 @@ class StoreTests(unittest.TestCase):
         self.assertFalse(any(args[:2] == ("release", "upload") for args in calls))
         self.assertFalse(any("--clobber" in args for args in calls))
 
-    def test_fetch_exports_the_validated_tag_for_publication_locking(self):
-        publisher = self.module("publish")
+    def built_app(self, directory, *, bundle="dev.amogh.DrunkPrime", platforms=("iPhoneOS",)):
+        app = directory / "Build.xcarchive/Products/Applications/DrunkPrime.app"
+        app.mkdir(parents=True)
+        info = {"CFBundleIdentifier": bundle, "CFBundleShortVersionString": "0.0.1", "CFBundleVersion": "1",
+                "MinimumOSVersion": "18.0", "CFBundleSupportedPlatforms": list(platforms),
+                "CFBundleExecutable": "DrunkPrime", "NSCameraUsageDescription": "Scan purifier labels."}
+        (app / "Info.plist").write_bytes(plistlib.dumps(info))
+        (app / "DrunkPrime").write_bytes(bytes.fromhex("cffaedfe0c000001"))
+        (app / "Frameworks").mkdir()
+        (app / "Frameworks/Current").symlink_to("DrunkPrime")
+        return app.parents[2]
+
+    def test_packaged_archive_is_stamped_and_accepted_by_the_publisher(self):
+        packager, publisher = self.module("package"), self.module("publish")
         with tempfile.TemporaryDirectory() as temporary:
-            assets = Path(temporary)
-            self.fixture_assets(assets)
-            output = assets / "outputs"
-            publisher.fetch = lambda *args: "v1.4.0"
-            with mock.patch.object(sys, "argv", ["publish.py", "fetch", "--app", "drunkprime", "--tag", "v1.4.0", "--source-repo", "amoghkrishna55/DrunkPrime", "--assets", str(assets)]), mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
-                publisher.main()
-            self.assertTrue(output.is_file())
-            self.assertEqual(dict(line.split("=", 1) for line in output.read_text().splitlines())["tag"], "v1.4.0")
+            directory = Path(temporary)
+            archive = self.built_app(directory)
+            ipa, metadata = packager.package(self.app, archive, "v1.5.0-beta.2", "7", "private-commit", directory / "dist")
+            self.assertEqual(ipa.name, "DrunkPrime-1.5.0-beta.2.ipa")
+            self.assertEqual((metadata["version"], metadata["buildVersion"], metadata["prerelease"]), ("1.5.0", "7", True))
+            with zipfile.ZipFile(ipa) as contents:
+                info = plistlib.loads(contents.read("Payload/DrunkPrime.app/Info.plist"))
+                link = contents.getinfo("Payload/DrunkPrime.app/Frameworks/Current")
+            self.assertEqual((info["CFBundleShortVersionString"], info["CFBundleVersion"]), ("1.5.0", "7"))
+            self.assertEqual(link.external_attr >> 28, 0o12, "symlinks must stay symlinks inside the IPA")
+            public = publisher.prepare(self.config, self.app, directory / "dist")
+            self.assertEqual(public["marketingVersion"], "1.5.0-beta.2")
+            self.assertNotIn("private-commit", json.dumps(public))
+
+    def test_packaging_rejects_the_wrong_app_a_simulator_build_and_bad_versions(self):
+        packager = self.module("package")
+        cases = [({"bundle": "dev.amogh.Other"}, "v1.5.0", "7"), ({"platforms": ("iPhoneSimulator",)}, "v1.5.0", "7"),
+                 ({}, "v1.5", "7"), ({}, "1.5.0", "7"), ({}, "v1.5.0", "07")]
+        for options, tag, build in cases:
+            with self.subTest(options=options, tag=tag, build=build), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                archive = self.built_app(directory, **options)
+                with self.assertRaises(ValueError):
+                    packager.package(self.app, archive, tag, build, "", directory / "dist")
+                self.assertFalse(list((directory / "dist").glob("*.ipa")) if (directory / "dist").exists() else [])
+
+    def test_source_icon_comes_from_the_store_configuration(self):
+        generator = self.module("catalog")
+        self.config["icon"] = "assets/homebase.png"
+        stable, _ = generator.generate(self.config, [self.app])
+        self.assertEqual(stable["iconURL"], self.config["url"] + "/assets/homebase.png")
+        self.config["icon"] = "../secrets.png"
+        with self.assertRaises(ValueError):
+            generator.generate(self.config, [self.app])
+
+    def test_every_registered_app_has_its_icon(self):
+        for path in sorted((ROOT / "apps").glob("*.json")):
+            app = json.loads(path.read_text())
+            self.assertEqual(app["id"], path.stem)
+            self.assertTrue((ROOT / app["iconURL"]).is_file(), f"{app['id']} icon is missing")

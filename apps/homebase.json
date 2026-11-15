@@ -1,0 +1,11 @@
+{
+  "id": "homebase",
+  "name": "Homebase",
+  "bundleIdentifier": "dev.amogh.Homebase",
+  "developerName": "Amogh Krishna",
+  "subtitle": "Your home servers in one place.",
+  "localizedDescription": "A single app for a self-hosted home setup. Watch a live camera, take snapshots and recordings, search and tail logs from VictoriaLogs, and see at a glance which servers are reporting. You point it at your own servers in Settings; nothing is preconfigured.",
+  "iconURL": "assets/homebase.png",
+  "category": "utilities",
+  "versions": []
+}

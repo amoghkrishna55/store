@@ -54,7 +54,7 @@ def prepare(config, app, assets):
     with ipa.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     if metadata["sha256"] != digest or metadata["size"] != ipa.stat().st_size:
-        raise ValueError("Private release metadata does not match the IPA.")
+        raise ValueError("Release metadata does not match the IPA.")
     if ipa.with_suffix(".ipa.sha256").read_text() != f"{digest}  {filename}\n":
         raise ValueError("IPA checksum file does not match.")
     with zipfile.ZipFile(ipa) as archive:
@@ -75,7 +75,7 @@ def prepare(config, app, assets):
                 "CFBundleShortVersionString": tag[1:].split("-", 1)[0],
                 "CFBundleVersion": metadata["buildVersion"], "MinimumOSVersion": metadata["minOSVersion"]}
     if metadata["bundleIdentifier"] != app["bundleIdentifier"] or metadata["version"] != expected["CFBundleShortVersionString"]:
-        raise ValueError("Private metadata belongs to another app or version.")
+        raise ValueError("Release metadata belongs to another app or version.")
     if any(info.get(key) != value for key, value in expected.items()):
         raise ValueError("IPA bundle metadata does not match its release.")
     public = {"bundleIdentifier": app["bundleIdentifier"], "version": info["CFBundleShortVersionString"],
@@ -169,42 +169,11 @@ def publish(config, app, assets):
     print(f"Published {app['name']} {public['marketingVersion']} to {repo}.")
 
 
-def fetch(app, source, tag, run_id, output):
-    if not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", source):
-        raise ValueError("Invalid source repository.")
-    if bool(tag) == bool(run_id):
-        raise ValueError("Supply either a release tag or a successful release run ID.")
-    if run_id:
-        run = json.loads(gh("run", "view", str(run_id), "--repo", source, "--json", "name,conclusion"))
-        if run["name"] != "Release" or run["conclusion"] != "success":
-            raise ValueError("Only successful Release workflow runs can be published.")
-        with tempfile.TemporaryDirectory() as temporary:
-            gh("run", "download", str(run_id), "--repo", source, "--pattern", app.get("ipaPrefix", app["name"]) + "-*", "--dir", temporary)
-            manifests = list(Path(temporary).rglob("app.json"))
-            if len(manifests) != 1:
-                raise ValueError("Expected exactly one release manifest in the run artifacts.")
-            tag = json.loads(manifests[0].read_text())["tag"]
-    if not tag.startswith("v"):
-        raise ValueError("Invalid private release tag.")
-    version_key(tag[1:])
-    release = json.loads(gh("release", "view", tag, "--repo", source, "--json", "isDraft,tagName"))
-    if release["isDraft"] or release["tagName"] != tag:
-        raise ValueError("The private release has not been published.")
-    filename = f"{app.get('ipaPrefix', app['name'])}-{tag[1:]}.ipa"
-    output.mkdir(parents=True, exist_ok=True)
-    gh("release", "download", tag, "--repo", source, "--dir", str(output), "--clobber",
-       "--pattern", filename, "--pattern", filename + ".sha256", "--pattern", "app.json")
-    return tag
-
-
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["fetch", "publish"])
+    parser = argparse.ArgumentParser(description="Publish packaged release files to the public store.")
+    parser.add_argument("command", choices=["publish"])
     parser.add_argument("--app", required=True)
     parser.add_argument("--assets", required=True, type=Path)
-    parser.add_argument("--source-repo")
-    parser.add_argument("--tag", default="")
-    parser.add_argument("--run-id", type=int, default=0)
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z][a-z0-9-]*", args.app):
         raise ValueError("Invalid app identifier.")
@@ -212,19 +181,10 @@ def main():
     app = json.loads((ROOT / "apps" / (args.app + ".json")).read_text())
     if app["id"] != args.app:
         raise ValueError("App identifier does not match its registration.")
-    if args.command == "fetch":
-        tag = fetch(app, args.source_repo or "", args.tag, args.run_id, args.assets)
-        public = prepare(config, app, args.assets)
-        if public["marketingVersion"] != tag[1:]:
-            raise ValueError("Fetched release metadata version does not match the validated tag.")
-        output = os.environ.get("GITHUB_OUTPUT")
-        if output:
-            with open(output, "a") as stream:
-                stream.write(f"tag={tag}\n")
-    else:
-        if os.environ.get("GITHUB_ACTIONS") and not os.environ.get("GH_TOKEN"):
-            raise ValueError("Add STORE_PUBLISH_TOKEN with Contents-write access to store to the private app repository's Actions secrets.")
-        publish(config, app, args.assets)
+    if os.environ.get("GITHUB_ACTIONS") and not os.environ.get("GH_TOKEN"):
+        raise ValueError("STORE_PUBLISH_TOKEN is missing. Add a token with Contents read and write access to the "
+                         "store repository to the app repository's Actions secrets, then re-run this job.")
+    publish(config, app, args.assets)
 
 
 if __name__ == "__main__":
