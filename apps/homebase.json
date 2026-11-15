@@ -10,6 +10,24 @@
   "versions": [
     {
       "bundleIdentifier": "dev.amogh.Homebase",
+      "version": "1.4.0",
+      "buildVersion": "5",
+      "marketingVersion": "1.4.0",
+      "date": "2026-11-15T18:11:12Z",
+      "minOSVersion": "17.0",
+      "downloadURL": "https://github.com/amoghkrishna55/store/releases/download/homebase-v1.4.0/Homebase-1.4.0.ipa",
+      "size": 1565789,
+      "sha256": "8817bfe20eae5ad142d8c4e97aacd7a8d559a8047248bcbc68d555a76df3adb6",
+      "prerelease": false,
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "Homebase connects to services on your home network."
+        }
+      }
+    },
+    {
+      "bundleIdentifier": "dev.amogh.Homebase",
       "version": "1.3.0",
       "buildVersion": "4",
       "marketingVersion": "1.3.0",
